@@ -1,0 +1,517 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Forward Pass Calculator</title>
+    <style>
+        :root {
+            --primary: #2563eb;
+            --bg: #f4f7f9;
+            --panel-bg: #ffffff;
+            --text-main: #0f172a;
+            --text-muted: #64748b;
+            --border: #e2e8f0;
+        }
+
+        * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Inter', system-ui, sans-serif; }
+
+        body {
+            background-color: var(--bg);
+            color: var(--text-main);
+            display: flex;
+            justify-content: center;
+            padding: 3rem;
+            min-height: 100vh;
+        }
+
+        .container {
+            display: flex;
+            gap: 2rem;
+            max-width: 1200px;
+            width: 100%;
+            flex-wrap: wrap;
+            align-items: flex-start;
+        }
+
+        /* Clean, Background-less Controls */
+        .controls {
+            flex: 1;
+            min-width: 320px;
+            /* background: var(--panel-bg); */ /* Removed background */
+            /* padding: 2.5rem 2rem; */ /* Removed padding */
+            /* border-radius: 16px; */ /* Removed border-radius */
+            /* box-shadow: 0 10px 25px -5px rgb(0 0 0 / 0.05); */ /* Removed shadow */
+            display: flex;
+            flex-direction: column;
+            gap: 2rem;
+            max-width: 100%; /* Adjusted for no-card layout */
+        }
+
+        h1 { font-size: 1.75rem; font-weight: 700; color: #0f172a; letter-spacing: -0.5px; line-height: 1.2; margin-bottom: 1rem;}
+        
+        .control-group { display: flex; flex-direction: column; gap: 0.75rem; }
+        .control-header { display: flex; justify-content: space-between; font-size: 0.95rem; font-weight: 600; color: #1e293b;}
+        .value-display { color: var(--primary); font-weight: 600; }
+        
+        /* Modern Slider Styling matching screenshots */
+        input[type="range"] {
+            width: 100%;
+            accent-color: var(--primary);
+            cursor: pointer;
+            height: 6px;
+        }
+
+        .status-box {
+            /* margin-top: 1rem; */
+            padding: 1.25rem;
+            border-radius: 12px;
+            background: #ffffff;
+            border: 1px solid #f1f5f9;
+            border-left: 6px solid var(--primary);
+            box-shadow: 0 4px 15px -3px rgb(0 0 0 / 0.05);
+            display: flex;
+            flex-direction: column;
+            gap: 0.75rem;
+        }
+
+        .status-box.illegal { border-left-color: #ef4444; }
+        .status-box.legal { border-left-color: #10b981; }
+
+        .metric-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            border-top: 1px solid #e2e8f0;
+            padding-top: 0.75rem;
+            margin-top: 0.25rem;
+        }
+
+        /* Canvas Panel */
+        .visualization {
+            flex: 2;
+            min-width: 500px;
+            display: flex;
+            flex-direction: column;
+            gap: 1rem;
+        }
+
+        /* Clean, Background-less Playback Scrubber */
+        .playback-bar {
+            /* background: var(--panel-bg); */ /* Removed background */
+            /* padding: 0.75rem 1.5rem; */ /* Removed padding */
+            /* border-radius: 12px; */ /* Removed border-radius */
+            display: flex;
+            align-items: center;
+            gap: 1.25rem;
+            /* box-shadow: 0 4px 10px -3px rgb(0 0 0 / 0.05); */ /* Removed shadow */
+        }
+
+        button.play-btn {
+            background: var(--primary);
+            color: white;
+            border: none;
+            border-radius: 50%;
+            width: 38px;
+            height: 38px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            font-size: 1rem;
+            box-shadow: 0 4px 6px -1px rgba(37, 99, 235, 0.3);
+            transition: transform 0.1s;
+        }
+        button.play-btn:active { transform: scale(0.95); }
+
+        .timeline { flex: 1; display: flex; align-items: center; }
+        .timeline input { width: 100%; }
+
+        .canvas-container {
+            width: 100%;
+            background: #328b4d;
+            border-radius: 16px;
+            overflow: hidden;
+            box-shadow: 0 10px 25px -5px rgb(0 0 0 / 0.1);
+        }
+
+        canvas { display: block; width: 100%; height: 650px; }
+
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <div class="controls">
+        <h1>Forward Pass<br>Calculator</h1>
+
+        <div class="control-group">
+            <div class="control-header">
+                <label for="speedSlider">Player Speed Forward</label>
+                <span class="value-display" id="speedVal">24 kph</span>
+            </div>
+            <input type="range" id="speedSlider" min="0" max="35" value="24" step="1">
+        </div>
+
+        <div class="control-group">
+            <div class="control-header">
+                <label for="distanceSlider">Pass Distance</label>
+                <span class="value-display" id="distanceVal">20 m</span>
+            </div>
+            <input type="range" id="distanceSlider" min="5" max="35" value="20" step="1">
+        </div>
+
+        <div class="control-group">
+            <div class="control-header">
+                <label for="angleSlider">Pass Angle (from hands)</label>
+                <span class="value-display" id="angleVal">3°</span>
+            </div>
+            <input type="range" id="angleSlider" min="-15" max="15" value="3" step="1">
+        </div>
+
+        <div class="control-group">
+            <div class="control-header">
+                <label for="spinSlider">Pass Spin Factor</label>
+                <span class="value-display" id="spinVal">0.5</span>
+            </div>
+            <input type="range" id="spinSlider" min="0" max="1" value="0.5" step="0.01">
+            <small style="font-size: 0.75rem; color: var(--text-muted); margin-top: -4px;">Aerodynamic drift backwards on the pitch</small>
+        </div>
+
+        <div class="status-box legal" id="statusBox">
+            <strong style="font-size: 0.95rem;">Pass Status: <span id="legalityText">Legal Pass</span></strong>
+            <p style="font-size: 0.85rem; color: var(--text-muted); line-height: 1.4;" id="explanationText">
+                The ball leaves the hands legally backwards/flat.
+            </p>
+            
+            <div class="metric-row">
+                <span style="font-size: 0.85rem; font-weight: 600; color: var(--text-main);">Net Ground Travel</span>
+                <span id="travelVal" style="font-weight: 700; color: var(--primary);">0.00 m</span>
+            </div>
+        </div>
+    </div>
+
+    <div class="visualization">
+        <div class="playback-bar">
+            <button class="play-btn" id="playBtn">▶</button>
+            <div class="timeline">
+                <input type="range" id="timeScrubber" min="0" max="100" value="0">
+            </div>
+        </div>
+
+        <div class="canvas-container">
+            <canvas id="pitch"></canvas>
+        </div>
+    </div>
+</div>
+
+<script>
+    const canvas = document.getElementById('pitch');
+    const ctx = canvas.getContext('2d');
+    
+    // UI Elements
+    const speedSlider = document.getElementById('speedSlider');
+    const distanceSlider = document.getElementById('distanceSlider');
+    const angleSlider = document.getElementById('angleSlider');
+    const spinSlider = document.getElementById('spinSlider');
+    const timeScrubber = document.getElementById('timeScrubber');
+    const playBtn = document.getElementById('playBtn');
+    
+    const speedVal = document.getElementById('speedVal');
+    const distanceVal = document.getElementById('distanceVal');
+    const angleVal = document.getElementById('angleVal');
+    const spinVal = document.getElementById('spinVal');
+    const statusBox = document.getElementById('statusBox');
+    const legalityText = document.getElementById('legalityText');
+    const explanationText = document.getElementById('explanationText');
+    const travelVal = document.getElementById('travelVal');
+
+    // Canvas Configuration
+    canvas.width = 800;
+    canvas.height = 650;
+    const pixelsPerMeter = 20; 
+
+    // The start point of the play. 
+    const startX = 40; 
+    const startY = (canvas.height / 2) + (10 * pixelsPerMeter); 
+
+    // Load Images
+    const ballImg = new Image();
+    ballImg.crossOrigin = "Anonymous"; 
+    ballImg.src = "https://cdn-icons-png.flaticon.com/128/11338/11338778.png";
+    
+    const playerImg = new Image();
+    playerImg.crossOrigin = "Anonymous";
+    playerImg.src = "https://cdn-icons-png.flaticon.com/128/20/20730.png";
+
+    let assetsLoaded = 0;
+    function checkAssets() {
+        assetsLoaded++;
+        if (assetsLoaded === 2) {
+            updatePhysics(); // Ensure initial render uses the new default values
+        }
+    }
+    ballImg.onload = checkAssets;
+    playerImg.onload = checkAssets;
+
+    // Physics constants
+    const rho = 1.225; 
+    const Cd = 0.3;    
+    const area = 0.015; 
+    const mass = 0.43;  
+    const k_drag = (0.5 * rho * Cd * area) / mass; 
+
+    // Playback state
+    let isPlaying = false;
+    let t = 0; 
+    let lastFrameTime = 0;
+    let flightTime = 1.0; 
+
+    function applyDragDistance(v0, time) {
+        if (v0 === 0) return 0;
+        const sign = Math.sign(v0);
+        const absV0 = Math.abs(v0);
+        const distance = (1 / k_drag) * Math.log(1 + absV0 * k_drag * time);
+        return sign * distance;
+    }
+
+    function getBallPosition(currentTime, speed, distance, angle, curve) {
+        const vp_ms = speed / 3.6; 
+        
+        // Momentum pulls the ball FORWARD (Negative Y)
+        const momentumY = -applyDragDistance(vp_ms, currentTime) * pixelsPerMeter;
+
+        // Lateral pass speed calculation
+        const v0x = (Math.exp(distance * k_drag) - 1) / (k_drag * flightTime);
+        const x = startX + (applyDragDistance(v0x, currentTime) * pixelsPerMeter);
+
+        // Hand Angle Drift
+        const v0y_angle = v0x * Math.tan(angle * Math.PI / 180);
+        const angleDriftY = applyDragDistance(v0y_angle, currentTime) * pixelsPerMeter;
+
+        // Aerodynamic Curve pulls the ball BACKWARDS (Positive Y)
+        const curveDriftY = curve * Math.pow(currentTime / flightTime, 2) * pixelsPerMeter;
+
+        const y = startY + momentumY + angleDriftY + curveDriftY;
+        return { x, y };
+    }
+
+    function updatePhysics() {
+        const vp_kph = parseFloat(speedSlider.value);
+        const passDistance = parseFloat(distanceSlider.value);
+        const passAngleDeg = parseFloat(angleSlider.value);
+        const curveFactor = parseFloat(spinSlider.value);
+
+        flightTime = passDistance / 14; 
+
+        speedVal.innerText = `${vp_kph} kph`;
+        distanceVal.innerText = `${passDistance} m`;
+        angleVal.innerText = passAngleDeg === 0 ? `0° (Flat)` : `${passAngleDeg}°`;
+        spinVal.innerText = curveFactor.toFixed(2); 
+
+        if (passAngleDeg < 0) {
+            statusBox.className = "status-box illegal";
+            legalityText.innerText = "Illegal Pass";
+            explanationText.innerText = "The ball is thrown forward out of the hands.";
+        } else {
+            statusBox.className = "status-box legal";
+            legalityText.innerText = "Legal Pass";
+            explanationText.innerText = "The ball leaves the hands legally backwards/flat.";
+        }
+
+        const endStats = getBallPosition(flightTime, vp_kph, passDistance, passAngleDeg, curveFactor);
+        const deltaYMeters = (startY - endStats.y) / pixelsPerMeter;
+
+        if (deltaYMeters > 0.01) {
+            travelVal.innerText = `${deltaYMeters.toFixed(2)} m Forward`;
+            travelVal.style.color = passAngleDeg < 0 ? '#ef4444' : '#2563eb';
+        } else if (deltaYMeters < -0.01) {
+            travelVal.innerText = `${Math.abs(deltaYMeters).toFixed(2)} m Backward`;
+            travelVal.style.color = '#10b981'; 
+        } else {
+            travelVal.innerText = `0.00 m (Flat)`;
+            travelVal.style.color = '#64748b';
+        }
+
+        if (assetsLoaded === 2) draw();
+    }
+
+    function draw() {
+        // Background
+        ctx.fillStyle = '#328b4d';
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        ctx.fillStyle = '#2d8045';
+        for(let i = 0; i < canvas.height; i += 40) {
+            if((i / 40) % 2 === 0) ctx.fillRect(0, i, canvas.width, 40);
+        }
+
+        // Pitch Lines
+        ctx.strokeStyle = 'rgba(255, 255, 255, 0.6)';
+        
+        // Touchline
+        ctx.lineWidth = 3;
+        ctx.beginPath();
+        const touchlineX = startX + (35 * pixelsPerMeter);
+        ctx.moveTo(touchlineX, 0); ctx.lineTo(touchlineX, canvas.height);
+        ctx.stroke();
+
+        // 5m and 15m lines 
+        ctx.setLineDash([15, 15]);
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.moveTo(touchlineX - (5 * pixelsPerMeter), 0); ctx.lineTo(touchlineX - (5 * pixelsPerMeter), canvas.height); 
+        ctx.moveTo(touchlineX - (15 * pixelsPerMeter), 0); ctx.lineTo(touchlineX - (15 * pixelsPerMeter), canvas.height); 
+        ctx.stroke();
+        ctx.setLineDash([]);
+
+        // Pass Line
+        ctx.lineWidth = 4;
+        ctx.beginPath();
+        ctx.moveTo(0, startY); ctx.lineTo(canvas.width, startY);
+        ctx.stroke();
+
+        // 10m Line 
+        ctx.lineWidth = 2;
+        ctx.setLineDash([15, 15]);
+        ctx.beginPath();
+        const line10mY = startY - (10 * pixelsPerMeter);
+        ctx.moveTo(0, line10mY); ctx.lineTo(canvas.width, line10mY);
+        ctx.stroke();
+        ctx.setLineDash([]);
+
+        // 22m Line 
+        ctx.beginPath();
+        const line22mY = startY - (22 * pixelsPerMeter);
+        ctx.moveTo(0, line22mY); ctx.lineTo(canvas.width, line22mY);
+        ctx.stroke();
+
+        ctx.fillStyle = 'rgba(255,255,255,0.8)';
+        ctx.font = '14px Inter';
+        ctx.fillText("Pass Line", 10, startY - 10);
+        ctx.fillText("10m Line", 10, line10mY - 10);
+        ctx.fillText("22m Line", 10, line22mY - 10);
+
+        const vp_kph = parseFloat(speedSlider.value);
+        const passDistance = parseFloat(distanceSlider.value);
+        const passAngleDeg = parseFloat(angleSlider.value);
+        const curveFactor = parseFloat(spinSlider.value);
+        const vp_ms = vp_kph / 3.6; 
+
+        const ballPos = getBallPosition(t, vp_kph, passDistance, passAngleDeg, curveFactor);
+        const endStats = getBallPosition(flightTime, vp_kph, passDistance, passAngleDeg, curveFactor);
+        
+        const receiverX = endStats.x;
+        const receiverStartY = endStats.y + (vp_ms * flightTime * pixelsPerMeter);
+        const currentReceiverY = receiverStartY - (vp_ms * t * pixelsPerMeter);
+        const currentPlayerY = startY - (vp_ms * t * pixelsPerMeter);
+
+        // Player Trajectories
+        ctx.strokeStyle = 'rgba(255, 255, 255, 0.4)';
+        ctx.setLineDash([5, 5]);
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.moveTo(startX, startY);
+        ctx.lineTo(startX, startY - (vp_ms * flightTime * pixelsPerMeter));
+        ctx.stroke();
+
+        ctx.beginPath();
+        ctx.moveTo(receiverX, receiverStartY);
+        ctx.lineTo(receiverX, receiverStartY - (vp_ms * flightTime * pixelsPerMeter));
+        ctx.stroke();
+        ctx.setLineDash([]);
+
+        // Ball Trajectory Curve
+        ctx.strokeStyle = '#fbbf24'; 
+        ctx.lineWidth = 3;
+        ctx.beginPath();
+        ctx.moveTo(startX, startY);
+        for (let step = 0; step <= flightTime; step += 0.05) {
+            const pos = getBallPosition(step, vp_kph, passDistance, passAngleDeg, curveFactor);
+            ctx.lineTo(pos.x, pos.y);
+        }
+        ctx.lineTo(endStats.x, endStats.y); 
+        ctx.stroke();
+
+        ctx.strokeStyle = 'rgba(255, 255, 255, 0.5)';
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        ctx.moveTo(startX, startY);
+        ctx.lineTo(endStats.x, startY);
+        ctx.stroke();
+
+        // Player 1 (Blue)
+        if (playerImg.complete) {
+            ctx.save();
+            ctx.translate(startX, currentPlayerY);
+            ctx.filter = 'hue-rotate(200deg) saturate(300%) brightness(0.8)';
+            ctx.drawImage(playerImg, -15, -15, 30, 30);
+            ctx.restore();
+        }
+
+        // Player 2 (Orange)
+        if (playerImg.complete) {
+            ctx.save();
+            ctx.translate(receiverX, currentReceiverY);
+            ctx.scale(-1, 1);
+            ctx.filter = 'hue-rotate(0deg) saturate(300%) brightness(0.9)';
+            ctx.drawImage(playerImg, -15, -15, 30, 30);
+            ctx.restore();
+        }
+
+        // Ball Icon
+        if (ballImg.complete) {
+            ctx.save();
+            ctx.translate(ballPos.x, ballPos.y);
+            ctx.rotate((t * 15) * (Math.PI / 180));
+            ctx.drawImage(ballImg, -14, -14, 28, 28);
+            ctx.restore();
+        }
+    }
+
+    function loop(now) {
+        if (!isPlaying) return;
+        let dt = (now - lastFrameTime) / 1000;
+        lastFrameTime = now;
+        t += dt;
+
+        if (t >= flightTime) {
+            t = flightTime;
+            isPlaying = false;
+            playBtn.innerText = "▶";
+        }
+
+        timeScrubber.value = (t / flightTime) * 100;
+        draw();
+        if (isPlaying) requestAnimationFrame(loop);
+    }
+
+    function togglePlay() {
+        isPlaying = !isPlaying;
+        if (isPlaying) {
+            playBtn.innerText = "⏸";
+            if (t >= flightTime) t = 0;
+            lastFrameTime = performance.now();
+            requestAnimationFrame(loop);
+        } else {
+            playBtn.innerText = "▶";
+        }
+    }
+
+    speedSlider.addEventListener('input', updatePhysics);
+    distanceSlider.addEventListener('input', updatePhysics);
+    angleSlider.addEventListener('input', updatePhysics);
+    spinSlider.addEventListener('input', updatePhysics);
+    
+    timeScrubber.addEventListener('input', (e) => {
+        isPlaying = false;
+        playBtn.innerText = "▶";
+        t = (e.target.value / 100) * flightTime;
+        draw();
+    });
+
+    playBtn.addEventListener('click', togglePlay);
+    
+</script>
+
+</body>
+</html>
